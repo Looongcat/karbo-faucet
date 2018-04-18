@@ -1,0 +1,5 @@
+*.wallet
+
+services/mariadb/logs/
+services/mariadb/mysql/
+services/node/

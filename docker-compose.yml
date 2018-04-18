@@ -1,0 +1,109 @@
+version: '2.2'
+
+services:
+    faucet-frontend:
+        image: nginx:stable
+        restart: always
+        env_file: .env
+        container_name: faucet-frontend
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./frontend:/www:ro
+            - ./services/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+            - ./services/letsencrypt:/etc/ssl:ro
+        links:
+            - faucet-php-fpm
+            - faucet-letsencrypt
+        networks:
+            - karbo-faucet-network
+
+    faucet-php-fpm:
+        build: ./services/php
+        restart: always
+        env_file: .env
+        container_name: faucet-php-fpm
+        links:
+            - faucet-db
+        volumes:
+            - ./frontend:/www
+        networks:
+            - karbo-faucet-network
+ 
+    faucet-db:
+        image: mariadb
+        env_file: .env
+        restart: always
+        container_name: faucet-db
+        ports:
+            - "3306"
+        networks:
+            - karbo-faucet-network
+        volumes:
+            - ./services/mariadb/init:/docker-entrypoint-initdb.d:ro
+            #- ./services/mariadb/mysql:/var/lib/mysql:rw
+            #- ./services/mariadb/logs:/var/log/mysql:rw
+        environment:
+            - MYSQL_USER=$DB_USER
+            - MYSQL_PASSWORD=$DB_PASS
+            - MYSQL_ROOT_PASSWORD=$DB_ROOT_PASS
+
+    karbo-node:
+        image: "looongcat/karbo-fullnode:$NODE_VERSION"
+        restart: always
+        env_file: .env
+        container_name: karbo-node
+        ports:
+            - "32347"
+            - "32348"
+        volumes:
+            - "$BLOCKCHAIN_PATH:/home/karbo/.karbowanec"
+        command:
+            - "--fee-address=$FEE_ADDRESS"
+        networks:
+            - karbo-faucet-network
+    
+    karbo-wallet:
+        image: "looongcat/karbo-fullnode:$NODE_VERSION"
+        restart: always
+        env_file: .env
+        container_name: karbo-wallet
+        volumes:
+            - $WALLET_PATH:/faucet-wallet.wallet
+        ports:
+            - "8070"
+        networks:
+            - karbo-faucet-network
+        entrypoint:
+            - simplewallet
+            - --wallet-file=/faucet-wallet.wallet
+            - --pass=$WALLET_PASS
+            - --rpc-bind-port=8070
+            - --rpc-bind-ip=0.0.0.0
+            - --daemon-host=karbo-node
+    
+    faucet-letsencrypt:
+        image: "certbot/certbot"
+        env_file: .env
+        container_name: faucet-letsencrypt
+        volumes:
+            #- ./frontend:/tmp:rw
+            - ./services/letsencrypt:/etc/letsencrypt:rw
+        ports:
+        - "80"
+        entrypoint:
+        - certbot
+        - certonly
+        - --standalone
+        - --agree-tos
+        - --renew-by-default
+        - -d $DOMAIN_NAME
+        - -d www.$DOMAIN_NAME
+        - -m "$DOMAIN_OWNER"
+        networks:
+            - karbo-faucet-network
+        
+networks:
+    karbo-faucet-network:
+        driver: bridge
