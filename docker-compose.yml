@@ -1,39 +1,45 @@
-version: '2.2'
+version: '3.0'
 
 services:
     faucet-frontend:
-        image: nginx:stable
+        image: "abiosoft/caddy:1.0.0-php-no-stats"
         restart: always
-        env_file: .env
         container_name: faucet-frontend
-        ports:
-            - "80:80"
-            - "443:443"
-        volumes:
-            - ./frontend:/www:ro
-            - ./services/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-            - ./services/letsencrypt/live/$DOMAIN_NAME/fullchain.pem:/etc/ssl/fullchain.pem:ro
-            - ./services/letsencrypt/live/$DOMAIN_NAME/privkey.pem:/etc/ssl/privkey.pem:ro
-        links:
-            - faucet-php-fpm
-            - faucet-letsencrypt
-        networks:
-            - karbo-faucet-network
-
-    faucet-php-fpm:
-        build: ./services/php
-        restart: always
         env_file: .env
-        container_name: faucet-php-fpm
-        expose:
-            - "9000"
+        ports:
+            - "0.0.0.0:80:80"
+            - "0.0.0.0:443:443"
+            #- "[::]:80:80"
+            #- "[::]:443:443"
+        volumes:
+            - ./services/caddy/caddyfile:/etc/Caddyfile:ro
+            - $FRONTEND_PATH:$FRONTEND_CONT_ENDPOINT:ro
+            - ./services/caddy/https-certs:/root/.caddy
         links:
             - faucet-db
-        volumes:
-            - ./frontend:/www
+        environment:
+            - ACME_AGREE=true
         networks:
-            - karbo-faucet-network
- 
+        - karbo-faucet-network
+    
+    ## FOR DB DEBUG PURPOSES ONLY!
+    #phpmyadmin:
+    #    image: phpmyadmin/phpmyadmin
+    #    env_file: .env
+    #    restart: always
+    #    container_name: phpmyadmin
+    #    ports:
+    #       - 8080:80
+    #    networks:
+    #        - karbo-faucet-network
+    #    environment:
+    #    #    - MYSQL_USER=$DB_USER
+    #    #    - MYSQL_PASSWORD=$DB_PASS
+    #    #    - MYSQL_ROOT_PASSWORD=$DB_ROOT_PASS
+    #        - PMA_HOST=faucet-db
+    #    links:
+    #       - faucet-db
+    
     faucet-db:
         image: mariadb
         env_file: .env
@@ -73,39 +79,19 @@ services:
         env_file: .env
         container_name: karbo-wallet
         volumes:
-            - $WALLET_PATH:/faucet-wallet.wallet
+            - $WALLET_FOLDER_PATH:/home/karbo/wallets
         expose:
             - "8070"
         networks:
             - karbo-faucet-network
         entrypoint:
             - simplewallet
-            - --wallet-file=/faucet-wallet.wallet
+            - --wallet-file=/home/karbo/wallets/$WALLET_FILENAME
             - --pass=$WALLET_PASS
             - --rpc-bind-port=8070
             - --rpc-bind-ip=0.0.0.0
             - --daemon-host=karbo-node
-    
-    faucet-letsencrypt:
-        image: "certbot/certbot"
-        env_file: .env
-        container_name: faucet-letsencrypt
-        volumes:
-            - ./services/letsencrypt:/etc/letsencrypt:rw
-        expose:
-        - "80"
-        entrypoint:
-        - certbot
-        - certonly
-        - --standalone
-        - --agree-tos
-        #- --renew-by-default
-        - -n
-        - -d $DOMAIN_NAME
-        - -d www.$DOMAIN_NAME
-        - -m $DOMAIN_OWNER
-        networks:
-            - karbo-faucet-network
+            - --daemon-port=32348
         
 networks:
     karbo-faucet-network:

@@ -1,0 +1,17 @@
+awesomekarbofaucet.com {
+  # redirect http to https
+  redir 301 {
+        if {>X-Forwarded-Proto} is http
+        /  https://{host}{uri}
+  }
+  gzip
+
+  tls owner@awesomekarbofaucet.com
+
+  on startup php-fpm7
+  fastcgi / 127.0.0.1:9000 php {
+    ext .php
+    split .php
+    index index.php
+  }
+}
